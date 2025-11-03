@@ -20,3 +20,26 @@ the cards automatically.
 * The Telegram **username** (without the `@`) of the admin who will receive contacts.
 
 ## 📁 Repository layout
+.
+├─ .env.example # example config
+├─ Dockerfile # Render ready
+├─ index.js # bot source
+├─ package.json
+└─ README.md
+
+## 🚀 Local development
+
+```bash
+# 1️⃣ Clone the repo
+git clone https://github.com/yourname/contact-router-bot.git
+cd contact-router-bot
+
+# 2️⃣ Install dependencies
+npm install
+
+# 3️⃣ Create a .env file (copy from .env.example)
+cp .env.example .env
+# edit .env and put your values
+
+# 4️⃣ Run the bot
+npm start
