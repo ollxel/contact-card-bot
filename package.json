@@ -1,4 +1,16 @@
-# Если файл создан локально, но не в git
-git add package.json
-git commit -m "Add package.json"
-git push origin main
+{
+  "name": "contact-card-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot that forwards contact cards to admin",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "telegraf": "^4.16.3"
+  }
+}
