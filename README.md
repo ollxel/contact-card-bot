@@ -31,7 +31,7 @@ the cards automatically.
 
 ```bash
 # 1️⃣ Clone the repo
-git clone https://github.com/yourname/contact-router-bot.git
+git clone https://github.com/ollxel/contact-card-bot.git
 cd contact-router-bot
 
 # 2️⃣ Install dependencies
