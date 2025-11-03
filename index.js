@@ -1,158 +1,158 @@
-/**
- * contact-router-bot – forward contacts to a predefined admin
- *
- * Run with:  npm start
- *
- * Environment variables (required):
- *   TELEGRAM_BOT_TOKEN – token from @BotFather
- *   ADMIN_USERNAME     – telegram username of the admin (without @)
- *   PORT               – http port for health‑check (Render sets this)
- */
-
-require('dotenv').config();
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const express = require('express');
 
+// Создаем Express приложение для Render
+const app = express();
+app.use(express.json());
+
+// Проверяем обязательные переменные окружения
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME?.toLowerCase();
-const PORT = process.env.PORT || 8080;
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 
-if (!BOT_TOKEN) {
-  console.error('❌ TELEGRA​M_BOT_TOKEN is missing in .env');
-  process.exit(1);
-}
-if (!ADMIN_USERNAME) {
-  console.error('❌ ADMIN_USERNAME is missing in .env');
+if (!BOT_TOKEN || !ADMIN_USERNAME) {
+  console.error('Missing required environment variables: TELEGRAM_BOT_TOKEN or ADMIN_USERNAME');
   process.exit(1);
 }
 
-/* -------------------------------------------------
- *  Bot initialisation
- * ------------------------------------------------- */
 const bot = new Telegraf(BOT_TOKEN);
 
-// In‑memory store of the admin chat id (filled on first /start)
-let adminChatId = null;
-
-/* -------------------------------------------------
- *  Helper: obtain admin chat id (once)
- * ------------------------------------------------- */
-async function ensureAdminChatId(ctx) {
-  // If we already know it – nothing to do
-  if (adminChatId) return adminChatId;
-
-  // Try to fetch it via username (works if the admin has ever
-  // started the bot, otherwise we get an error)
-  try {
-    const chat = await ctx.telegram.getChat(`@${ADMIN_USERNAME}`);
-    adminChatId = chat.id;
-    console.log(`✅ Got admin chat id: ${adminChatId}`);
-    return adminChatId;
-  } catch (err) {
-    console.warn(
-      `⚠️ Could not resolve @${ADMIN_USERNAME} to a chat id yet. ` +
-        `Make sure the admin has started the bot at least once.`
-    );
-    return null;
+// Команда /start
+bot.start((ctx) => {
+  const username = ctx.from.username;
+  const firstName = ctx.from.first_name || 'Пользователь';
+  
+  // Проверяем, является ли пользователь админом
+  if (username === ADMIN_USERNAME) {
+    return ctx.reply('👋 Привет, админ! Я буду пересылать тебе контакты от пользователей.');
   }
-}
-
-/* -------------------------------------------------
- *  /start – for everyone
- * ------------------------------------------------- */
-bot.start(async (ctx) => {
-  const fromUsername = ctx.from.username?.toLowerCase() || '';
-
-  // If the user is the admin → store his chat id and give a simple greeting
-  if (fromUsername === ADMIN_USERNAME) {
-    adminChatId = ctx.chat.id;
-    await ctx.reply(
-      `👋 Привет, администратор! Я буду пересылать сюда все полученные от пользователей контакты.`
-    );
-    return;
-  }
-
-  // Normal user
-  await ctx.reply(
-    `🟢 Привет! Пожалуйста, отправьте мне карточку контакта, которую хотите передать администратору @${ADMIN_USERNAME}.`
+  
+  // Для обычных пользователей - отправляем сообщение с кнопкой для отправки номера телефона
+  ctx.reply(
+    `👋 Привет, ${firstName}!\n\n` +
+    'Это бот авторизации. Регистрация займет меньше минуты!\n\n' +
+    'Сейчас мы попросим твой номер телефона. Он нужен, чтобы создать аккаунт и быстро разобраться в проблеме, если ты обратишься в поддержку.',
+    Markup.keyboard([
+      [Markup.button.contactRequest('📱 Отправить номер телефона')]
+    ]).oneTime().resize()
   );
 });
 
-/* -------------------------------------------------
- *  Contact handler – only contacts are interesting
- * ------------------------------------------------- */
+// Обработчик контактов (номеров телефона)
 bot.on('contact', async (ctx) => {
-  const fromUsername = ctx.from.username?.toLowerCase() || '';
+  const user = ctx.from;
   const contact = ctx.message.contact;
-
-  // If the admin sends a contact we just acknowledge it
-  if (fromUsername === ADMIN_USERNAME) {
-    await ctx.reply('✅ Я получил вашу карточку, но вы — администратор, поэтому ничего не пересылаю.');
-    return;
+  
+  // Проверяем, что контакт принадлежит отправителю
+  if (contact.user_id !== user.id) {
+    return ctx.reply('❌ Пожалуйста, отправьте свой собственный номер телефона.');
   }
-
-  // Normal user → forward to admin
-  const adminId = await ensureAdminChatId(ctx);
-
-  if (!adminId) {
-    // We couldn't resolve admin chat id – tell the user to try later
-    await ctx.reply(
-      `❗️ Не удалось доставить контакт. Администратор ещё не запустил бота. Пожалуйста, попробуйте позже.`
-    );
-    return;
-  }
-
+  
   try {
-    // Forward the contact using sendContact (preserves phone & name)
+    // Пересылаем контакт админу
     await ctx.telegram.sendContact(
-      adminId,
+      ADMIN_USERNAME,
       contact.phone_number,
-      contact.first_name,
+      contact.first_name || user.first_name,
       {
-        last_name: contact.last_name,
-        vcard: contact.vcard,
-        // Optional: add a caption with the sender's info
-        caption: `📩 Новый контакт от @${ctx.from.username || ctx.from.id}`
+        last_name: contact.last_name || user.last_name,
+        user_id: contact.user_id
       }
     );
-
-    await ctx.reply('✅ Ваш контакт успешно отправлен администратору.');
-  } catch (err) {
-    console.error('❌ Ошибка при отправке контакта администратору:', err);
-    await ctx.reply('❗️ Не удалось переслать контакт. Попробуйте позже.');
+    
+    // Подтверждаем пользователю
+    await ctx.reply(
+      '✅ Спасибо! Ваш номер телефона успешно отправлен.\n\n' +
+      'Теперь вы зарегистрированы в системе!',
+      Markup.removeKeyboard() // Убираем клавиатуру
+    );
+    
+    console.log(`Контакт от ${user.first_name} (ID: ${user.id}) переслан админу @${ADMIN_USERNAME}`);
+    
+  } catch (error) {
+    console.error('Ошибка при пересылке контакта:', error);
+    
+    if (error.description && error.description.includes('user not found')) {
+      await ctx.reply(
+        '❌ Админ не найден. Пожалуйста, сообщите об этом администратору.',
+        Markup.removeKeyboard()
+      );
+    } else {
+      await ctx.reply(
+        '❌ Произошла ошибка при отправке номера телефона. Попробуйте позже.',
+        Markup.removeKeyboard()
+      );
+    }
   }
 });
 
-/* -------------------------------------------------
- *  Any other message → politely decline
- * ------------------------------------------------- */
-bot.on('message', async (ctx) => {
-  // Ignore contacts (handled above)
-  if (ctx.message.contact) return;
-
-  await ctx.reply(
-    `ℹ️ Пожалуйста, отправьте только карточку контакта. Нажмите /start, если хотите начать заново.`
-  );
+// Обработчик текстовых сообщений
+bot.on('text', (ctx) => {
+  const username = ctx.from.username;
+  const text = ctx.message.text;
+  
+  if (username === ADMIN_USERNAME) {
+    return ctx.reply('Я жду номера телефонов от пользователей для пересылки вам.');
+  }
+  
+  // Если пользователь отправил текст вместо контакта, показываем подсказку
+  if (text !== '/start') {
+    ctx.reply(
+      'Пожалуйста, используйте кнопку "📱 Отправить номер телефона" ниже, чтобы поделиться своим номером.',
+      Markup.keyboard([
+        [Markup.button.contactRequest('📱 Отправить номер телефона')]
+      ]).oneTime().resize()
+    );
+  }
 });
 
-/* -------------------------------------------------
- *  Health‑check HTTP server (required by Render)
- * ------------------------------------------------- */
-const app = express();
-
-app.get('/', (req, res) => res.send('🟢 Contact‑router bot is alive'));
-
-app.listen(PORT, () => {
-  console.log(`🌐 HTTP health‑check listening on port ${PORT}`);
+// Обработка ошибок
+bot.catch((err, ctx) => {
+  console.error(`Error for ${ctx.updateType}:`, err);
 });
 
-/* -------------------------------------------------
- *  Start the bot (long‑polling – works fine on Render)
- * ------------------------------------------------- */
-bot.launch().then(() => console.log('🤖 Bot started (long‑polling)'));
+// Запуск бота через вебхук (для Render)
+const PORT = process.env.PORT || 3000;
 
-/* -------------------------------------------------
- *  Graceful stop (Render sends SIGTERM on redeploy)
- * ------------------------------------------------- */
+// В продакшене используем вебхук
+if (process.env.NODE_ENV === 'production') {
+  const WEBHOOK_PATH = `/webhook/${BOT_TOKEN}`;
+  
+  app.use(bot.webhookCallback(WEBHOOK_PATH));
+  
+  // Установка вебхука
+  app.get('/', (req, res) => {
+    res.send('Bot is running!');
+  });
+  
+  const startServer = async () => {
+    try {
+      // Для Render получаем URL автоматически
+      const renderUrl = process.env.RENDER_EXTERNAL_URL || `https://${process.env.RENDER_SERVICE_NAME}.onrender.com`;
+      await bot.telegram.setWebhook(`${renderUrl}${WEBHOOK_PATH}`);
+      console.log('Webhook set successfully:', `${renderUrl}${WEBHOOK_PATH}`);
+      
+      app.listen(PORT, () => {
+        console.log(`Bot is running on port ${PORT}`);
+        console.log(`Admin username: @${ADMIN_USERNAME}`);
+      });
+    } catch (error) {
+      console.error('Error setting webhook:', error);
+    }
+  };
+  
+  startServer();
+} else {
+  // В разработке используем long polling
+  bot.launch()
+    .then(() => {
+      console.log('Bot started in development mode');
+      console.log(`Admin username: @${ADMIN_USERNAME}`);
+    })
+    .catch(console.error);
+}
+
+// Элегантное завершение работы
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+module.exports = app;
