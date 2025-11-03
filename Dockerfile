@@ -1,21 +1,28 @@
-# -------------------------------------------------
-# Use the official lightweight Node image
-# -------------------------------------------------
-FROM node:20-alpine
+# Используем официальный Node.js образ
+FROM node:18-alpine
 
-# Create app directory
-WORKDIR /usr/src/app
+# Устанавливаем рабочую директорию
+WORKDIR /app
 
-# Install app dependencies (only package.json is copied first
-# so Docker can cache this layer)
+# Копируем package.json и package-lock.json
 COPY package*.json ./
-RUN npm ci --only=production
 
-# Copy the rest of the source code
+# Устанавливаем зависимости
+RUN npm install --only=production
+
+# Копируем исходный код
 COPY . .
 
-# Expose the port (Render will map $PORT automatically)
-EXPOSE 8080
+# Создаем непривилегированного пользователя для безопасности
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S botuser -u 1001
 
-# Run the bot
+# Меняем владельца файлов
+RUN chown -R botuser:nodejs /app
+USER botuser
+
+# Открываем порт
+EXPOSE 3000
+
+# Запускаем приложение
 CMD ["npm", "start"]
