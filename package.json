@@ -1,0 +1,4 @@
+# Если файл создан локально, но не в git
+git add package.json
+git commit -m "Add package.json"
+git push origin main
