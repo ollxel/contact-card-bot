@@ -12,6 +12,14 @@
     "express": "^4.18.2"
   },
   "engines": {
-    "node": ">=14.0.0"
-  }
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "contact",
+    "authorization"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }
